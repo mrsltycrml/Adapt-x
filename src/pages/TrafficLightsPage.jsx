@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useSearchParams } from 'react-router-dom'
 import { demoIntersections } from '../data/demoData'
+import { readDemoValue } from '../data/demoStore'
 
 function SignalLamp({ cx, cy, color, active, reduceMotion }) {
   return (
@@ -241,28 +242,34 @@ function IntersectionScene({ telemetry, reduceMotion }) {
 export default function TrafficLightsPage() {
   const reduceMotion = useReducedMotion()
   const [searchParams, setSearchParams] = useSearchParams()
-  const selectedId = searchParams.get('intersection') || demoIntersections[0].id
+  const assignedIds = readDemoValue('settings', {}).assigned || demoIntersections.map(({ id }) => id)
+  const assignedIntersections = demoIntersections.filter((intersection) => assignedIds.includes(intersection.id))
+  const selectedId = searchParams.get('intersection') || assignedIntersections[0]?.id || demoIntersections[0].id
   const selectedIntersection = demoIntersections.find((intersection) => intersection.id === selectedId) || demoIntersections[0]
-  const [telemetry, setTelemetry] = useState(() => ({ ...selectedIntersection }))
+  const [telemetryById, setTelemetryById] = useState(() => Object.fromEntries(demoIntersections.map((intersection) => [intersection.id, { ...intersection }])))
+  const telemetry = telemetryById[selectedId] || selectedIntersection
 
-  // Live countdown matching real-time feel
   useEffect(() => {
     const timer = setInterval(() => {
-      setTelemetry((current) => {
+      setTelemetryById((allTelemetry) => {
+        const current = allTelemetry[selectedId] || selectedIntersection
+        let next
         if (current.phaseSeconds <= 1) {
-          return {
+          next = {
             ...current,
             nsState: current.nsState === 'Green' ? 'Stop' : 'Green',
             ewState: current.ewState === 'Stop' ? 'Green' : 'Stop',
             phaseSeconds: 24,
             vehicles: current.vehicles >= 32 ? 14 : current.vehicles + 3,
           }
+        } else {
+          next = { ...current, phaseSeconds: current.phaseSeconds - 1 }
         }
-        return { ...current, phaseSeconds: current.phaseSeconds - 1 }
+        return { ...allTelemetry, [selectedId]: next }
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [])
+  }, [selectedId, selectedIntersection])
 
   return (
     <div className="px-8 lg:px-12 py-8 flex flex-col gap-6 max-w-[1240px]">
@@ -283,7 +290,7 @@ export default function TrafficLightsPage() {
         </h2>
         {/* 2-Column Grid matching reference image exactly */}
         <div className="grid grid-cols-1 min-[560px]:grid-cols-2 gap-3.5 max-w-[960px]">
-          {demoIntersections.map((item) => {
+          {assignedIntersections.map((item) => {
             const isSelected = selectedId === item.id
             const isGreen = item.level === 'green'
             const isYellow = item.level === 'yellow'
@@ -328,6 +335,7 @@ export default function TrafficLightsPage() {
             )
           })}
         </div>
+        {!assignedIntersections.length && <p className="mt-3 text-xs text-zinc-400">No intersections assigned. Choose locations in Settings.</p>}
       </div>
 
       {/* Section 2: Live Telemetry */}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -19,6 +19,7 @@ import {
   demoViolationEvents,
   demoViolators,
 } from '../data/demoData'
+import { readDemoCollection, readDemoValue, writeDemoCollection } from '../data/demoStore'
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -30,17 +31,45 @@ const navItems = [
 
 export default function DashboardLayout({ onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notificationsRead, setNotificationsRead] = useState(false)
+  const [notifications, setNotifications] = useState(() => readDemoCollection('notifications', demoNotifications).map((item) => ({ ...item, read: item.read ?? false })))
+  const [operatorAccount, setOperatorAccount] = useState(() => readDemoValue('settings', {}).account || null)
   const navigate = useNavigate()
   const location = useLocation()
+  const alertPreferences = readDemoValue('settings', {}).alerts || [true, true, true, true, false]
+  const visibleNotifications = notifications.filter((notification) => {
+    if (notification.preference === 'queue') return alertPreferences[3]
+    if (notification.preference === 'sensors') return alertPreferences[2]
+    if (notification.preference === 'priority') return alertPreferences[0]
+    if (notification.preference === 'daily') return alertPreferences[4]
+    return true
+  })
+  const storedViolators = readDemoCollection('violators', demoViolators)
+  const storedViolations = readDemoCollection('violations', demoViolationEvents)
+
+  useEffect(() => {
+    const handleDemoUpdate = (event) => {
+      if (event.detail === 'notifications') {
+        setNotifications(readDemoCollection('notifications', demoNotifications).map((item) => ({ ...item, read: item.read ?? false })))
+      }
+      if (event.detail === 'settings') setOperatorAccount(readDemoValue('settings', {}).account || null)
+    }
+    window.addEventListener('adapt-demo-update', handleDemoUpdate)
+    return () => window.removeEventListener('adapt-demo-update', handleDemoUpdate)
+  }, [])
+
+  const notificationsRead = !visibleNotifications.some((notification) => !notification.read)
+  const displayName = operatorAccount?.name?.trim() || 'Mewpo Operator'
+  const displayRole = operatorAccount?.role || 'Operator'
+  const firstName = displayName.split(/\s+/)[0]
   const searchTargets = [
     ...navItems.map((item) => ({ label: item.name, detail: 'Page', path: item.path })),
     ...demoIntersections.map(({ id, name }) => ({ label: name, detail: 'Intersection', path: `/traffic-lights?intersection=${id}` })),
-    ...demoViolators.map(({ id, plate, name }) => ({ label: plate, detail: name, path: `/violators?person=${id}` })),
-    ...demoViolationEvents.map(({ id, type, plate, disposition }) => ({ label: plate, detail: type, path: `/violations?tab=${disposition === 'Dispute' ? 'disputes' : 'queue'}&event=${id}` })),
+    ...storedViolators.map(({ id, plate, name }) => ({ label: plate, detail: name, path: `/violators?person=${id}` })),
+    ...storedViolations.filter((event) => ['Review', 'Dispute'].includes(event.disposition)).map(({ id, type, plate, disposition }) => ({ label: plate, detail: type, path: `/violations?tab=${disposition === 'Dispute' ? 'disputes' : 'queue'}&event=${id}` })),
   ]
   const filteredTargets = searchQuery.trim()
     ? searchTargets.filter((target) => `${target.label} ${target.detail}`.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)
@@ -52,6 +81,14 @@ export default function DashboardLayout({ onLogout }) {
     } else {
       navigate('/login')
     }
+  }
+
+  const markNotificationsRead = (title) => {
+    const updated = notifications.map((notification) => !title || notification.title === title
+      ? { ...notification, read: true }
+      : notification)
+    writeDemoCollection('notifications', updated)
+    setNotifications(updated)
   }
 
   return (
@@ -133,21 +170,14 @@ export default function DashboardLayout({ onLogout }) {
          ========================================================== */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0c0c0e]">
         {/* Global Top Bar - Crisp White Search Box, Bell, Avatar */}
-        <header className="h-16 sm:h-[76px] px-3 sm:px-5 lg:px-12 flex items-center justify-between gap-2 sm:gap-6 shrink-0 z-10 border-b border-[#18181b]/50">
+        <header className="relative h-14 sm:h-[76px] px-3 sm:px-5 lg:px-12 flex items-center justify-between gap-2 sm:gap-6 shrink-0 z-10 border-b border-[#18181b]/50">
           {/* Mobile hamburger */}
-          <div className="lg:hidden flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-2 text-zinc-400 hover:text-white"
-            >
-              <Menu size={20} />
-            </button>
-            <span className="max-[360px]:hidden font-bold text-base tracking-tight text-white">ADAPT-X</span>
+          <div className="lg:hidden flex min-w-0 flex-1 items-center">
+            <NavLink to="/dashboard" className="truncate text-[17px] font-black tracking-tight text-white">ADAPT<span className="text-emerald-500">-X</span></NavLink>
           </div>
 
           {/* Search Bar - Crisp White Rounded-MD Input */}
-          <div className="relative w-full min-w-0 max-w-[340px] flex-1 sm:w-[340px] sm:flex-none" onClick={(event) => event.stopPropagation()}>
+          <div className="relative hidden w-full min-w-0 max-w-[340px] flex-1 sm:block sm:w-[340px] sm:flex-none" onClick={(event) => event.stopPropagation()}>
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={15} />
             <input
               type="text"
@@ -196,12 +226,20 @@ export default function DashboardLayout({ onLogout }) {
 
           {/* Right Header Badges: Notification Bell + Avatar (M) + Mewpo Operator */}
           <div className="flex shrink-0 items-center gap-2 sm:gap-3.5">
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen((open) => !open)}
+              aria-label={mobileSearchOpen ? 'Close search' : 'Search'}
+              className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white sm:hidden"
+            >
+              <Search size={19} />
+            </button>
             {/* Notification Bell - White rounded square button as in photo */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setNotificationsOpen((open) => !open)}
-                className="relative w-9 h-9 rounded-xl bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+                className="relative flex h-9 w-9 items-center justify-center rounded-md bg-white text-zinc-800 shadow-sm transition-colors hover:bg-zinc-100 sm:rounded-xl"
                 aria-label="Notifications"
                 aria-expanded={notificationsOpen}
               >
@@ -218,68 +256,84 @@ export default function DashboardLayout({ onLogout }) {
                   >
                     <div className="mb-2 flex items-center justify-between border-b border-zinc-100 pb-2">
                       <span className="text-[12px] font-semibold">Notifications</span>
-                      <button type="button" onClick={() => setNotificationsRead(true)} className="text-[9px] font-medium text-emerald-700 hover:text-emerald-900">Mark all read</button>
+                      <button type="button" onClick={() => markNotificationsRead()} className="text-[9px] font-medium text-emerald-700 hover:text-emerald-900">Mark all read</button>
                     </div>
-                    {demoNotifications.map((notification) => (
-                      <button key={notification.title} type="button" onClick={() => { navigate(notification.path); setNotificationsOpen(false) }} className="block w-full rounded-md p-2 text-left hover:bg-zinc-50">
+                    {visibleNotifications.map((notification) => (
+                      <button key={notification.id || notification.title} type="button" onClick={() => { markNotificationsRead(notification.title); navigate(notification.path); setNotificationsOpen(false) }} className={`block w-full rounded-md p-2 text-left hover:bg-zinc-50 ${notification.read ? 'opacity-60' : ''}`}>
                         <span className="block text-[11px] font-semibold">{notification.title}</span>
                         <span className="mt-0.5 block text-[9px] text-zinc-500">{notification.detail}</span>
                       </button>
                     ))}
+                    {!visibleNotifications.length && <p className="px-2 py-3 text-center text-[10px] text-zinc-500">No notifications for enabled categories.</p>}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open navigation menu"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white lg:hidden"
+            >
+              <Menu size={20} />
+            </button>
+
             {/* User Avatar Circle (M) + Username/Role */}
-            <div className="flex items-center gap-2.5">
+            <div className="hidden items-center gap-2.5 sm:flex">
               <div className="w-9 h-9 rounded-full bg-[#16a34a] text-white font-bold text-sm flex items-center justify-center shadow-sm">
-                M
+                {firstName.charAt(0).toUpperCase()}
               </div>
               <div className="hidden sm:block text-left leading-tight">
-                <p className="text-[13px] font-bold text-white">Mewpo</p>
-                <p className="text-[11px] text-zinc-400">Operator</p>
+                <p className="text-[13px] font-bold text-white">{firstName}</p>
+                <p className="text-[11px] text-zinc-400">{displayRole}</p>
               </div>
             </div>
           </div>
+
+          <AnimatePresence>
+            {mobileSearchOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="absolute inset-x-3 top-full z-40 mt-2 sm:hidden"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && filteredTargets[0]) {
+                        navigate(filteredTargets[0].path)
+                        setSearchQuery('')
+                        setMobileSearchOpen(false)
+                      }
+                      if (event.key === 'Escape') setMobileSearchOpen(false)
+                    }}
+                    placeholder="Search intersections, plates..."
+                    className="w-full rounded-md border border-zinc-200 bg-white py-2.5 pl-10 pr-3 text-sm text-zinc-900 shadow-lg outline-none focus:ring-2 focus:ring-emerald-600/30"
+                  />
+                </div>
+                {searchQuery.trim() && <div className="mt-1 rounded-md border border-zinc-200 bg-white p-1 text-zinc-900 shadow-xl">
+                  {filteredTargets.length ? filteredTargets.map((target) => <button key={`${target.label}-${target.path}`} type="button" onClick={() => { navigate(target.path); setSearchQuery(''); setMobileSearchOpen(false) }} className="flex w-full items-center justify-between gap-3 rounded px-2.5 py-2 text-left hover:bg-zinc-100"><span className="text-xs font-medium">{target.label}</span><span className="truncate text-[10px] text-zinc-400">{target.detail}</span></button>) : <p className="px-2.5 py-2 text-xs text-zinc-500">No matches found</p>}
+                </div>}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </header>
 
         {/* Page Content Outlet */}
-        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0 bg-[#0c0c0e]" onClick={() => searchOpen && setSearchOpen(false)}>
+        <main className="flex-1 overflow-y-auto pb-5 lg:pb-0 bg-[#0c0c0e]" onClick={() => { if (searchOpen) setSearchOpen(false); if (mobileSearchOpen) setMobileSearchOpen(false) }}>
           <AnimatePresence mode="wait">
             <motion.div key={`${location.pathname}${location.search}`} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.18 }}>
               <Outlet />
             </motion.div>
           </AnimatePresence>
         </main>
-      </div>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#141416]/95 backdrop-blur-md border-t border-[#222226]">
-        <nav className="mx-auto flex max-w-lg items-center justify-around px-1.5 py-1.5">
-          {navItems.slice(0, 4).map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1 transition-all ${
-                  isActive ? 'text-emerald-400 font-semibold' : 'text-zinc-400'
-                }`
-              }
-            >
-              <item.icon size={18} />
-              <span className="w-full truncate text-center text-[9px] sm:text-[10px]">{item.name}</span>
-            </NavLink>
-          ))}
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-1 text-zinc-400"
-          >
-            <Menu size={18} />
-            <span className="text-[9px] sm:text-[10px]">More</span>
-          </button>
-        </nav>
       </div>
 
       {/* Mobile Drawer */}
@@ -297,7 +351,7 @@ export default function DashboardLayout({ onLogout }) {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              className="absolute bottom-16 left-3 right-3 max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-2xl border border-[#2a2a32] bg-[#1e1e24] p-4 space-y-2"
+              className="absolute right-3 top-16 max-h-[calc(100dvh-5rem)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-[#2a2a32] bg-[#1e1e24] p-4 shadow-2xl space-y-2"
               onClick={(e) => e.stopPropagation()}
             >
               <p className="text-xs uppercase font-bold text-zinc-400 tracking-wider mb-2">Navigation</p>

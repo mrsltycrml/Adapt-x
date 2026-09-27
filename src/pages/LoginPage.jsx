@@ -1,24 +1,68 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { demoCredentials } from '../data/demoData'
+import { demoResetCode, readDemoValue, writeDemoValue } from '../data/demoStore'
 
 export default function LoginPage({ onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [keepSignedIn, setKeepSignedIn] = useState(true)
+  const [loginError, setLoginError] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetNotice, setResetNotice] = useState('')
+  const [contactNotice, setContactNotice] = useState(false)
 
   // Forgot password flow states
   const [view, setView] = useState('login') // 'login' | 'forgot-1' | 'forgot-2' | 'forgot-3' | 'forgot-4'
-  const [resetEmail, setResetEmail] = useState('youremail@gmail.com')
+  const [resetEmail, setResetEmail] = useState(demoCredentials.email)
   const [code, setCode] = useState(['', '', '', '', '', ''])
+  const [newPlate, setNewPlate] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onLogin()
+    const storedEmail = readDemoValue('demoEmail', demoCredentials.email)
+    const storedPassword = readDemoValue('operatorPassword', 'AdaptDemo2026!')
+    const validLogin = email.trim().toLowerCase() === storedEmail.toLowerCase()
+      && password === storedPassword
+
+    if (!validLogin) {
+      setLoginError('Email or password does not match the demo operator account.')
+      return
+    }
+    setLoginError('')
+    onLogin(keepSignedIn)
+  }
+
+  const handleResetRequest = (event) => {
+    event.preventDefault()
+    const storedEmail = readDemoValue('demoEmail', demoCredentials.email)
+    if (resetEmail.trim().toLowerCase() !== storedEmail.toLowerCase()) {
+      setResetError('No demo account is registered for this email address.')
+      return
+    }
+    setResetError('')
+    setResetNotice('Demo reset code: 246810')
+    setView('forgot-2')
+  }
+
+  const handleResetSubmit = (event) => {
+    event.preventDefault()
+    if (code.join('') !== demoResetCode) {
+      setResetError('That verification code is not valid. Use the demo code shown above.')
+      return
+    }
+    if (newPlate.length < 8) {
+      setResetError('New password must be at least 8 characters.')
+      return
+    }
+    writeDemoValue('operatorPassword', newPlate)
+    setResetError('')
+    setView('forgot-4')
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden flex bg-black font-sans">
+    <div className="relative flex min-h-[100dvh] w-screen flex-col overflow-x-hidden overflow-y-auto bg-black font-sans lg:h-screen lg:min-h-0 lg:flex-row lg:overflow-hidden">
       {/* ==========================================================
           LEFT PANEL (56% width on desktop) - Deep Black
           Displays "ADAPT -" on the left with neat spacing and no clipping
@@ -53,14 +97,27 @@ export default function LoginPage({ onLogin }) {
         </div>
       </div>
 
+      <div className="relative h-[37dvh] min-h-[215px] max-h-[320px] w-full shrink-0 overflow-hidden bg-[#0a0a0c] lg:hidden">
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 500 300" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M -40 242 C 98 242 163 232 225 202 C 300 165 359 84 540 64" fill="none" stroke="#151618" strokeWidth="58" />
+          <path d="M -40 242 C 98 242 163 232 225 202 C 300 165 359 84 540 64" fill="none" stroke="#343639" strokeWidth="48" />
+          <path d="M -40 242 C 98 242 163 232 225 202 C 300 165 359 84 540 64" fill="none" stroke="#dedfdd" strokeWidth="2" strokeDasharray="16 19" opacity="0.9" />
+          <path d="M 20 -45 C 128 -20 190 44 250 130 C 308 213 365 278 496 348" fill="none" stroke="#05200e" strokeWidth="65" />
+          <path d="M 20 -45 C 128 -20 190 44 250 130 C 308 213 365 278 496 348" fill="none" stroke="#15803d" strokeWidth="54" />
+          <motion.path d="M 20 -45 C 128 -20 190 44 250 130 C 308 213 365 278 496 348" fill="none" stroke="#f4fff7" strokeWidth="2.5" strokeDasharray="13 16" initial={{ strokeDashoffset: 0 }} animate={{ strokeDashoffset: -116 }} transition={{ duration: 4, repeat: Infinity, ease: 'linear' }} />
+        </svg>
+        <div className="absolute left-6 top-[47%] z-10 -translate-y-1/2 text-[31px] font-black leading-none text-white drop-shadow-lg sm:left-10 sm:text-[38px]">ADAPT<span className="ml-1 text-zinc-400">-</span></div>
+        <span className="absolute bottom-3 left-5 z-10 text-[9px] font-semibold tracking-wide text-white/70">® ADAPT-X</span>
+      </div>
+
       {/* ==========================================================
           RIGHT PANEL (44% width on desktop, 100% on mobile) - Crisp White
          ========================================================== */}
       <div
-        className="w-full lg:w-[44%] h-full bg-[#f3f8fb] relative flex items-center justify-center px-6 sm:px-12 md:px-14 overflow-y-auto"
+        className="relative z-20 flex min-h-[63dvh] w-full flex-1 items-start justify-center overflow-y-auto bg-[#f3f8fb] px-6 pb-8 pt-8 sm:px-12 md:px-14 lg:h-full lg:min-h-0 lg:w-[44%] lg:items-center lg:py-10"
         style={{ position: 'relative', zIndex: 20 }}
       >
-        <div className="w-full max-w-[370px] py-10 z-20">
+        <div className="z-20 w-full max-w-[370px]">
           <AnimatePresence mode="wait">
             {/* VIEW 1: OPERATOR SIGN IN */}
             {view === 'login' && (
@@ -72,47 +129,47 @@ export default function LoginPage({ onLogin }) {
                 transition={{ duration: 0.2 }}
               >
                 {/* Mobile branding */}
-                <div className="lg:hidden mb-8 text-center">
-                  <h1 className="text-3xl font-black text-zinc-950 tracking-tight">ADAPT - X</h1>
-                </div>
-
                 <h1 className="text-[26px] sm:text-[28px] font-bold text-zinc-900 tracking-[-0.025em] leading-tight">
-                  Welcome back, Bai!
+                  Operator sign in
                 </h1>
                 <p className="text-zinc-500 text-[14px] mt-2 mb-7 leading-normal font-normal">
                   Sign in to view your violation history and manage disputes.
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* License Number Input */}
+                  {/* Email input */}
                   <div>
                     <label className="block text-[11px] font-medium text-zinc-700 mb-1.5">
-                      License Number
+                      Email
                     </label>
                     <input
-                      type="text"
+                      type="email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="A00-00-00000"
+                      onChange={(e) => { setEmail(e.target.value); setLoginError('') }}
+                      placeholder="operator@gmail.com"
+                      required
                       autoComplete="username"
                       className="w-full px-4 py-2.5 bg-white text-zinc-900 text-[14px] rounded-md border border-zinc-200 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all outline-none"
                     />
                   </div>
 
-                  {/* Plate Number Input */}
+                  {/* Password input */}
                   <div>
                     <label className="block text-[11px] font-medium text-zinc-700 mb-1.5">
-                      Plate Number
+                      Password
                     </label>
                     <input
-                      type="text"
+                      type="password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="ABX123"
+                      onChange={(e) => { setPassword(e.target.value); setLoginError('') }}
+                      placeholder="Enter your password"
+                      required
                       autoComplete="off"
                       className="w-full px-4 py-2.5 bg-white text-zinc-900 text-[14px] rounded-md border border-zinc-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all outline-none"
                     />
                   </div>
+
+                  {loginError && <p role="alert" className="text-xs font-medium text-red-600">{loginError}</p>}
 
                   {/* Keep me signed in & Forgot Password */}
                   <div className="flex items-center justify-between pt-1">
@@ -130,7 +187,7 @@ export default function LoginPage({ onLogin }) {
                       onClick={() => setView('forgot-1')}
                       className="text-[13px] text-emerald-600 hover:text-emerald-700 font-semibold transition-colors cursor-pointer"
                     >
-                      Forgot credentials?
+                      Forgot password?
                     </button>
                   </div>
 
@@ -145,18 +202,19 @@ export default function LoginPage({ onLogin }) {
 
                 {/* Footer administrator link */}
                 <p className="mt-8 text-center text-[13px] text-zinc-500">
-                  Need help?{' '}
+                  Need access?{' '}
                   <a
                     href="#admin"
                     onClick={(e) => {
                       e.preventDefault()
-                      alert('Please contact your local ADAPT-X administrator for help with your account.')
+                      setContactNotice(true)
                     }}
                     className="text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
                   >
-                    Contact Us
+                    Contact your administrator
                   </a>
                 </p>
+                {contactNotice && <p role="status" className="mt-2 text-center text-xs text-emerald-700">Contact your ADAPT-X administrator at support@adapt-x.demo.</p>}
               </motion.div>
             )}
 
@@ -191,10 +249,7 @@ export default function LoginPage({ onLogin }) {
                 </p>
 
                 <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    setView('forgot-2')
-                  }}
+                  onSubmit={handleResetRequest}
                   className="space-y-4"
                 >
                   <div>
@@ -205,11 +260,13 @@ export default function LoginPage({ onLogin }) {
                       type="email"
                       required
                       value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
+                      onChange={(e) => { setResetEmail(e.target.value); setResetError('') }}
                       placeholder="operator@gmail.com"
                       className="w-full px-4 py-2.5 bg-[#f8fafc] text-zinc-900 text-[14px] rounded-xl border border-zinc-200 focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none"
                     />
                   </div>
+
+                  {resetError && <p role="alert" className="text-xs font-medium text-red-600">{resetError}</p>}
 
                   <button
                     type="submit"
@@ -254,6 +311,7 @@ export default function LoginPage({ onLogin }) {
                   We sent a reset link to <strong className="text-zinc-800 font-semibold">{resetEmail}</strong>. It
                   expires in 15 minutes.
                 </p>
+                <p className="mb-5 rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{resetNotice}</p>
 
                 <button
                   type="button"
@@ -268,7 +326,7 @@ export default function LoginPage({ onLogin }) {
                   Didn't get it?{' '}
                   <button
                     type="button"
-                    onClick={() => alert(`A fresh reset code was sent to ${resetEmail}`)}
+                    onClick={() => setResetNotice('A fresh demo reset code is: 246810')}
                     className="text-emerald-600 hover:text-emerald-700 font-semibold transition-colors cursor-pointer"
                   >
                     Resend email
@@ -310,10 +368,7 @@ export default function LoginPage({ onLogin }) {
                 </p>
 
                 <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    setView('forgot-4')
-                  }}
+                  onSubmit={handleResetSubmit}
                   className="space-y-4"
                 >
                   <div className="flex justify-between gap-2">
@@ -322,10 +377,12 @@ export default function LoginPage({ onLogin }) {
                         key={i}
                         id={`code-${i}`}
                         type="text"
+                        inputMode="numeric"
+                        aria-label={`Verification digit ${i + 1}`}
                         maxLength="1"
                         value={code[i]}
                         onChange={(e) => {
-                          const val = e.target.value
+                          const val = e.target.value.replace(/\D/g, '')
                           const nextCode = [...code]
                           nextCode[i] = val
                           setCode(nextCode)
@@ -343,11 +400,16 @@ export default function LoginPage({ onLogin }) {
                       NEW PASSWORD
                     </label>
                     <input
-                      type="password"
-                      placeholder="••••••••••••"
+                      type="text"
+                      required
+                      value={newPlate}
+                      onChange={(e) => { setNewPlate(e.target.value); setResetError('') }}
+                      placeholder="At least 8 characters"
                       className="w-full px-4 py-2.5 bg-[#f8fafc] text-zinc-900 text-[14px] rounded-xl border border-zinc-200 focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none"
                     />
                   </div>
+
+                  {resetError && <p role="alert" className="text-xs font-medium text-red-600">{resetError}</p>}
 
                   <button
                     type="submit"
@@ -384,7 +446,7 @@ export default function LoginPage({ onLogin }) {
                   Password updated
                 </h1>
                 <p className="text-zinc-500 text-[13px] mt-2 mb-7 max-w-xs mx-auto">
-                  Your operator account security credentials have been successfully updated.
+                  Your demo operator password has been updated for {resetEmail}.
                 </p>
 
                 <button

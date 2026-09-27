@@ -192,3 +192,21 @@ button, a, input {
   transition: all 0.2s ease;
 }
 
+@media (max-width: 639px) {
+  main > div[class*='px-'],
+  main > div > div[class*='px-'] {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  main > div[class*='px-'],
+  main > div > div[class*='px-'] {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  main .adapt-card {
+    border-radius: 10px;
+  }
+}
+

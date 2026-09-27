@@ -12,15 +12,22 @@ import OperatorOverviewPage from './pages/OperatorOverviewPage'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('adapt_auth') !== 'false'
+    return localStorage.getItem('adapt_auth') === 'true' || sessionStorage.getItem('adapt_auth') === 'true'
   })
 
-  const handleLogin = () => {
-    localStorage.setItem('adapt_auth', 'true')
+  const handleLogin = (rememberMe) => {
+    if (rememberMe) {
+      localStorage.setItem('adapt_auth', 'true')
+      sessionStorage.removeItem('adapt_auth')
+    } else {
+      localStorage.setItem('adapt_auth', 'false')
+      sessionStorage.setItem('adapt_auth', 'true')
+    }
     setIsAuthenticated(true)
   }
 
   const handleLogout = () => {
+    sessionStorage.removeItem('adapt_auth')
     localStorage.setItem('adapt_auth', 'false')
     setIsAuthenticated(false)
   }
@@ -38,6 +45,7 @@ function App() {
       <Routes>
         <Route element={<DashboardLayout onLogout={handleLogout} />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<OperatorOverviewPage />} />
           <Route path="/traffic-lights" element={<TrafficLightsPage />} />
           <Route path="/violations" element={<ViolationsPage />} />

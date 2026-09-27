@@ -25,6 +25,7 @@ import {
   demoSystemHealth,
   demoTrafficVolume,
 } from '../data/demoData'
+import { readDemoCollection, readDemoValue } from '../data/demoStore'
 
 const healthIcons = { radio: Radio, camera: Camera, activity: Activity, siren: Siren }
 
@@ -58,8 +59,10 @@ function MetricCard({ label, value, note, accent, icon: Icon }) {
 }
 
 export default function OperatorOverviewPage() {
+  const assignedIds = readDemoValue('settings', {}).assigned || demoIntersections.map(({ id }) => id)
+  const issuedEvents = readDemoCollection('violations', []).filter((event) => event.disposition === 'Issued').length
   const metrics = [
-    { label: 'Total Violations', value: demoSummary.totalViolations, note: '▲ 8 since yesterday', accent: 'text-zinc-900', icon: TriangleAlert },
+    { label: 'Total Violations', value: demoSummary.totalViolations + issuedEvents, note: `▲ ${8 + issuedEvents} since yesterday`, accent: 'text-zinc-900', icon: TriangleAlert },
     { label: 'Violators', value: demoSummary.violators, note: `${demoSummary.repeatOffenders} repeat offenders`, accent: 'text-zinc-900', icon: Activity },
     { label: 'Traffic Lights', value: `${demoSummary.activeSignals}/${demoSummary.totalSignals}`, note: '1 approach offline', accent: 'text-red-600', icon: Radio },
     { label: 'AI Status', value: 'ACTIVE', note: 'All modules are nominal', accent: 'text-emerald-600', icon: CheckCircle2 },
@@ -81,8 +84,8 @@ export default function OperatorOverviewPage() {
         {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-[1.45fr_0.85fr] gap-4 items-start">
-        <motion.div variants={itemVariants} className="adapt-card p-4 min-h-[210px]">
+      <section className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[1.45fr_0.85fr]">
+        <motion.div variants={itemVariants} className="adapt-card min-h-[210px] p-4 xl:col-start-1 xl:row-start-1">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[15px] font-bold text-zinc-900">Traffic Volume</h2>
             <span className="text-[10px] text-zinc-500">Last 24 hours</span>
@@ -100,52 +103,50 @@ export default function OperatorOverviewPage() {
           </div>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="adapt-card p-4">
-          <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+        <motion.section variants={itemVariants} className="adapt-card max-w-[780px] p-4 xl:col-start-1 xl:row-start-2">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+            <h2 className="text-[15px] font-bold text-zinc-900">Intersections</h2>
+            <Link to="/traffic-lights" className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800">
+              View all <ArrowUpRight size={12} />
+            </Link>
+          </div>
+          <div>
+            {demoDashboardIntersections.filter((item) => assignedIds.includes(item.id)).map((item) => {
+              const intersection = demoIntersections.find(({ id }) => id === item.id)
+              return (
+                <Link key={item.id} to={`/traffic-lights?intersection=${item.id}`} className="group flex items-center justify-between gap-4 border-b py-3 transition-colors last:border-0 border-zinc-100 hover:bg-zinc-50">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className={`flex shrink-0 gap-1 ${item.tone === 'red' ? 'text-red-500' : item.tone === 'amber' ? 'text-amber-500' : 'text-emerald-600'}`}>
+                      <i className="h-1.5 w-1.5 rounded-full bg-current" /><i className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] font-semibold text-zinc-900 group-hover:text-emerald-700">{intersection.name}</span>
+                      <span className="block truncate text-[9px] text-zinc-500">{item.details}</span>
+                    </span>
+                  </div>
+                  <span className={`shrink-0 text-[9px] font-semibold ${item.tone === 'red' ? 'text-red-600' : item.tone === 'amber' ? 'text-amber-600' : 'text-emerald-700'}`}>{item.tone === 'amber' ? 'Congested' : intersection.status[0] + intersection.status.slice(1).toLowerCase()}</span>
+                </Link>
+              )
+            })}
+            {!demoDashboardIntersections.some((item) => assignedIds.includes(item.id)) && (
+              <p className="py-4 text-xs text-zinc-500">No intersections assigned. <Link to="/settings" className="font-semibold text-emerald-700 hover:text-emerald-800">Update settings</Link></p>
+            )}
+          </div>
+        </motion.section>
+
+        <motion.div variants={itemVariants} className="adapt-card p-4 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
             <h2 className="text-[15px] font-bold text-zinc-900">System Health</h2>
-            <span className="text-[10px] text-emerald-600 font-semibold">4 online</span>
+            <span className="text-[10px] font-semibold text-emerald-600">4 online</span>
           </div>
           <div>
             {demoSystemHealth.map(({ name, state, icon }) => {
               const Icon = healthIcons[icon]
-              return (
-              <div key={name} className="flex items-center justify-between gap-3 py-3 border-b last:border-0 border-zinc-100">
-                <span className="flex items-center gap-2 text-[11px] text-zinc-700"><Icon size={13} className="text-zinc-400" />{name}</span>
-                <span className="shrink-0 text-[9px] font-semibold text-emerald-700">{state}</span>
-              </div>
-              )
+              return <div key={name} className="flex items-center justify-between gap-3 border-b py-3 last:border-0 border-zinc-100"><span className="flex items-center gap-2 text-[11px] text-zinc-700"><Icon size={13} className="text-zinc-400" />{name}</span><span className="shrink-0 text-[9px] font-semibold text-emerald-700">{state}</span></div>
             })}
           </div>
         </motion.div>
       </section>
-
-      <motion.section variants={itemVariants} className="adapt-card p-4 max-w-[780px]">
-        <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-          <h2 className="text-[15px] font-bold text-zinc-900">Intersections</h2>
-          <Link to="/traffic-lights" className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800">
-            View all <ArrowUpRight size={12} />
-          </Link>
-        </div>
-        <div>
-          {demoDashboardIntersections.map((item) => {
-            const intersection = demoIntersections.find(({ id }) => id === item.id)
-            return (
-            <Link key={item.id} to={`/traffic-lights?intersection=${item.id}`} className="group flex items-center justify-between gap-4 py-3 border-b last:border-0 border-zinc-100 hover:bg-zinc-50 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`flex gap-1 shrink-0 ${item.tone === 'red' ? 'text-red-500' : item.tone === 'amber' ? 'text-amber-500' : 'text-emerald-600'}`}>
-                  <i className="w-1.5 h-1.5 rounded-full bg-current" /><i className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[12px] font-semibold text-zinc-900 group-hover:text-emerald-700">{intersection.name}</span>
-                  <span className="block text-[9px] text-zinc-500 truncate">{item.details}</span>
-                </span>
-              </div>
-              <span className={`shrink-0 text-[9px] font-semibold ${item.tone === 'red' ? 'text-red-600' : item.tone === 'amber' ? 'text-amber-600' : 'text-emerald-700'}`}>{item.tone === 'amber' ? 'Congested' : intersection.status[0] + intersection.status.slice(1).toLowerCase()}</span>
-            </Link>
-            )
-          })}
-        </div>
-      </motion.section>
     </motion.div>
   )
 }

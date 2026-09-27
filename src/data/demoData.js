@@ -96,6 +96,8 @@ export const demoViolators = [
     id: 1,
     name: 'Santos, Ederlino P.',
     shortName: 'Santos, Ederlino',
+    licenseNumber: 'A00-00-00000',
+    email: 'operator@gmail.com',
     plate: 'XYZ 9081',
     vehicle: 'Toyota Vios',
     fullVehicle: 'Sedan • Toyota Vios • Silver',
@@ -154,6 +156,10 @@ export const demoGeneratedReports = [
 ]
 
 export const demoNotifications = [
-  { title: 'New violation for review', detail: 'Quezon Ave. Approach · 2 min ago', path: '/violations' },
-  { title: 'Signal offline', detail: 'South Avenue · 18 min ago', path: '/traffic-lights' },
+  { title: 'New violation for review', detail: 'Quezon Ave. Approach · 2 min ago', path: '/violations', preference: 'queue' },
+  { title: 'Signal offline', detail: 'South Avenue · 18 min ago', path: '/traffic-lights', preference: 'sensors' },
 ]
+
+export const demoCredentials = {
+  email: demoViolators[0].email,
+}

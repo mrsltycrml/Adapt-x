@@ -46,6 +46,8 @@ npm run build
 
 The app is presentation-ready with local sample records in `src/data/demoData.js`. Dashboard totals, intersections, violation events, violators, notifications, and report charts are mock data; no API or database is required. Demo actions update the client UI, while theme and density preferences persist in local storage. Authentication is only a demo gate and is not production security.
 
+Demo sign-in: email `operator@gmail.com`, password `AdaptDemo2026!`. Password recovery uses that email and code `246810`. Settings > Data & Privacy can export local demo state or reset it to the original sample records.
+
 ## Deploy to Vercel
 
 Import the repository into Vercel and select the folder containing `package.json` as the project root. Use the Vite preset, `npm run build` as the build command, and `dist` as the output directory. The included `vercel.json` rewrites client-side routes to the app entry point so direct links such as `/reports` work after deployment.

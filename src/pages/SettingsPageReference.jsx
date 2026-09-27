@@ -12,6 +12,8 @@ import {
   Sun,
   UserRound,
 } from 'lucide-react'
+import { demoIntersections } from '../data/demoData'
+import { readDemoCollection, readDemoValue, resetDemoStore, writeDemoValue } from '../data/demoStore'
 
 const sections = [
   { id: 'Security', icon: LockKeyhole },
@@ -30,7 +32,7 @@ const initialAlerts = [
   ['Daily summary email', 'A daily report of activity and system status', false],
 ]
 
-const intersections = ['Commonwealth Ave & Fairview', 'Regalado Ave & Mindanao Ave', 'Don Antonio Village Ave', 'Katipunan & Aurora Ave']
+const intersections = demoIntersections.map(({ id, name }) => ({ id, name }))
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -79,12 +81,19 @@ export default function SettingsPageReference() {
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('adapt_theme') || 'Light')
   const [density, setDensity] = useState(() => localStorage.getItem('adapt_density') || 'Comfortable')
-  const [alerts, setAlerts] = useState(initialAlerts.map(([, , enabled]) => enabled))
-  const [twoFactor, setTwoFactor] = useState([true, true])
-  const [assigned, setAssigned] = useState([true, true, false, true])
+  const [storedSettings, setStoredSettings] = useState(() => readDemoValue('settings', {}))
+  const [alerts, setAlerts] = useState(() => storedSettings.alerts || initialAlerts.map(([, , enabled]) => enabled))
+  const [twoFactor, setTwoFactor] = useState(() => storedSettings.twoFactor || [true, true])
+  const [assigned, setAssigned] = useState(() => storedSettings.assigned || demoIntersections.map(({ id }) => id))
   const [privacyNotice, setPrivacyNotice] = useState(false)
-  const [account, setAccount] = useState({ name: 'Mewpo Operator', employeeId: 'OPS-2048', email: 'operator@adapt-x.gov', role: 'Traffic Operator' })
+  const [resetConfirmation, setResetConfirmation] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [account, setAccount] = useState(() => storedSettings.account || { name: 'Mewpo Operator', employeeId: 'OPS-2048', email: 'operator@adapt-x.gov', role: 'Traffic Operator' })
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' })
+  const [activity] = useState(() => readDemoCollection('activity', [
+    { id: 'seed-1', action: 'Ruled dispute #DP-1031 · Upheld', createdAt: 'Today, 2:12 PM' },
+    { id: 'seed-2', action: 'Reviewed and confirmed violation #1042', createdAt: 'Today, 12:47 PM' },
+  ]))
 
   useEffect(() => {
     const resolvedTheme = theme === 'System'
@@ -97,10 +106,66 @@ export default function SettingsPageReference() {
   }, [theme, density])
 
   const updateAccount = (field) => (value) => setAccount((current) => ({ ...current, [field]: value }))
+  const toggleTwoFactor = (index) => {
+    const nextTwoFactor = twoFactor.map((value, currentIndex) => currentIndex === index ? !value : value)
+    const nextSettings = { ...storedSettings, twoFactor: nextTwoFactor }
+    setTwoFactor(nextTwoFactor)
+    setStoredSettings(nextSettings)
+    writeDemoValue('settings', nextSettings)
+  }
   const handleSave = (event) => {
     event.preventDefault()
+    setSaveError('')
+    if (activeSection === 'Security') {
+      const currentPassword = readDemoValue('operatorPassword', 'AdaptDemo2026!')
+      if (passwords.current !== currentPassword) {
+        setSaveError('Current password does not match the demo account.')
+        return
+      }
+      if (passwords.next.length < 8) {
+        setSaveError('New password must be at least 8 characters.')
+        return
+      }
+      if (passwords.next !== passwords.confirm) {
+        setSaveError('New password and confirmation do not match.')
+        return
+      }
+      writeDemoValue('operatorPassword', passwords.next)
+      setPasswords({ current: '', next: '', confirm: '' })
+    } else {
+      const nextSettings = { ...storedSettings, account, alerts, twoFactor, assigned }
+      writeDemoValue('settings', nextSettings)
+      setStoredSettings(nextSettings)
+    }
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2200)
+  }
+
+  const handleDataExport = () => {
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      account,
+      settings: { alerts, twoFactor, assigned, theme, density },
+      auditActivity: readDemoValue('activity', []),
+      notifications: readDemoValue('notifications', []),
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'adapt-x-demo-data.json'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setPrivacyNotice(true)
+  }
+
+  const handleResetDemo = () => {
+    resetDemoStore()
+    localStorage.removeItem('adapt_theme')
+    localStorage.removeItem('adapt_density')
+    setResetConfirmation(false)
+    window.location.reload()
   }
 
   const sectionContent = () => {
@@ -126,9 +191,9 @@ export default function SettingsPageReference() {
         return <>
           <SectionHeader title="Assigned Intersections" subtitle="Select the locations shown in your live operations view." />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {intersections.map((name, index) => (
-              <label key={name} className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-3 text-[11px] font-medium transition-colors ${assigned[index] ? 'border-emerald-200 bg-emerald-50 text-zinc-800' : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>
-                <input type="checkbox" checked={assigned[index]} onChange={() => setAssigned((current) => current.map((value, i) => i === index ? !value : value))} className="accent-emerald-700" />
+            {intersections.map(({ id, name }) => (
+              <label key={id} className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-3 text-[11px] font-medium transition-colors ${assigned.includes(id) ? 'border-emerald-200 bg-emerald-50 text-zinc-800' : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}>
+                <input type="checkbox" checked={assigned.includes(id)} onChange={() => setAssigned((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])} className="accent-emerald-700" />
                 {name}
               </label>
             ))}
@@ -144,8 +209,21 @@ export default function SettingsPageReference() {
             <p className="mt-1">Sign-in history, report downloads, and enforcement decisions are recorded in the audit log.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setPrivacyNotice(true)} className="w-fit rounded-md border border-zinc-300 px-3 py-2 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-50">Request a data export</button>
-            {privacyNotice && <span className="text-[10px] font-medium text-emerald-700">Export request received</span>}
+            <button type="button" onClick={handleDataExport} className="w-fit rounded-md border border-zinc-300 px-3 py-2 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-50">Download data export</button>
+            {privacyNotice && <span role="status" className="text-[10px] font-medium text-emerald-700">Demo data exported</span>}
+          </div>
+          <div className="border-t border-zinc-200 pt-3">
+            <h3 className="text-[12px] font-semibold text-zinc-900">Reset presentation data</h3>
+            <p className="mt-1 text-[10px] text-zinc-500">Clear local mock changes and restore the original sample records.</p>
+            {!resetConfirmation ? (
+              <button type="button" onClick={() => setResetConfirmation(true)} className="mt-2 rounded-md border border-red-200 px-3 py-2 text-[10px] font-semibold text-red-700 hover:bg-red-50">Reset demo data</button>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] text-red-700">This clears saved demo changes.</span>
+                <button type="button" onClick={handleResetDemo} className="rounded-md bg-red-700 px-3 py-2 text-[10px] font-semibold text-white hover:bg-red-800">Confirm reset</button>
+                <button type="button" onClick={() => setResetConfirmation(false)} className="rounded-md border border-zinc-300 px-3 py-2 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-50">Cancel</button>
+              </div>
+            )}
           </div>
         </>
       case 'Appearance':
@@ -185,10 +263,11 @@ export default function SettingsPageReference() {
             ))}
           </div>
           <button type="submit" className="w-fit rounded-md bg-zinc-900 px-4 py-2 text-[10px] font-semibold text-white hover:bg-zinc-700">{saved ? 'Password Updated' : 'Update Password'}</button>
+          {saveError && <p role="alert" className="text-xs font-medium text-red-600">{saveError}</p>}
           <div className="border-t border-zinc-200 pt-3">
             <h3 className="text-[12px] font-semibold text-zinc-900">Two-Factor Authentication</h3>
-            <SettingRow title="Authenticator app" description="Required for all operator accounts" checked={twoFactor[0]} onChange={() => setTwoFactor((current) => current.map((value, index) => index === 0 ? !value : value))} />
-            <SettingRow title="SMS backup code" description="+63 *** *** 0148" checked={twoFactor[1]} onChange={() => setTwoFactor((current) => current.map((value, index) => index === 1 ? !value : value))} />
+            <SettingRow title="Authenticator app" description="Required for all operator accounts" checked={twoFactor[0]} onChange={() => toggleTwoFactor(0)} />
+            <SettingRow title="SMS backup code" description="+63 *** *** 0148" checked={twoFactor[1]} onChange={() => toggleTwoFactor(1)} />
           </div>
           <div className="border-t border-zinc-200 pt-3">
             <h3 className="mb-1 text-[12px] font-semibold text-zinc-900">Trusted Devices / Saved Login</h3>
@@ -197,8 +276,12 @@ export default function SettingsPageReference() {
           </div>
           <div className="border-t border-zinc-200 pt-3">
             <h3 className="mb-2 text-[12px] font-semibold text-zinc-900">Activity Center</h3>
-            <p className="border-b border-zinc-100 py-2 text-[10px] text-zinc-700">Ruled dispute #DP-1031 · Upheld <span className="float-right text-zinc-400">Today, 2:12 PM</span></p>
-            <p className="py-2 text-[10px] text-zinc-700">Reviewed and confirmed violation #1042 <span className="float-right text-zinc-400">Today, 12:47 PM</span></p>
+            {activity.slice(0, 5).map((entry) => (
+              <p key={entry.id} className="border-b border-zinc-100 py-2 text-[10px] text-zinc-700 last:border-0">
+                {entry.action}{' '}
+                <span className="float-right text-zinc-400">{Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : new Date(entry.createdAt).toLocaleString()}</span>
+              </p>
+            ))}
           </div>
         </>
     }
@@ -212,9 +295,20 @@ export default function SettingsPageReference() {
       </header>
 
       <div className="flex flex-col items-start gap-4 lg:flex-row lg:gap-5">
-        <nav aria-label="Settings sections" className="grid w-full grid-cols-2 gap-1.5 sm:grid-cols-3 lg:flex lg:w-[170px] lg:shrink-0 lg:flex-col">
+        <label className="block w-full lg:hidden">
+          <span className="sr-only">Settings section</span>
+          <select
+            aria-label="Settings section"
+            value={activeSection}
+            onChange={(event) => { setActiveSection(event.target.value); setSaved(false) }}
+            className="h-10 w-full rounded-md border border-zinc-700 bg-[#1c1c1f] px-3 text-xs font-semibold text-white outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+          >
+            {sections.map(({ id }) => <option key={id} value={id}>{id}</option>)}
+          </select>
+        </label>
+        <nav aria-label="Settings sections" className="hidden w-full gap-1.5 lg:flex lg:w-[170px] lg:shrink-0 lg:flex-col">
           {sections.map(({ id, icon: Icon }) => (
-            <button key={id} type="button" onClick={() => { setActiveSection(id); setSaved(false) }} className={`flex min-h-9 items-center gap-2 rounded-md border px-3 text-left text-[11px] font-medium transition-all ${activeSection === id ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-zinc-700 bg-transparent text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800'}`}>
+              <button key={id} type="button" onClick={() => { setActiveSection(id); setSaved(false) }} className={`flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-3 text-left text-[11px] font-medium transition-all lg:w-full ${activeSection === id ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-zinc-700 bg-transparent text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800'}`}>
               <Icon size={13} /><span>{id}</span>
             </button>
           ))}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, Download } from 'lucide-react'
-import { demoDailyViolations, demoGeneratedReports, demoSummary } from '../data/demoData'
+import { demoDailyViolations, demoGeneratedReports, demoNotifications, demoSummary } from '../data/demoData'
+import { appendDemoRecord, readDemoCollection, writeDemoCollection } from '../data/demoStore'
 
 const escapeHtml = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -16,8 +17,10 @@ export default function ReportsPage() {
   const [toDate, setToDate] = useState('2026-09-24')
   const [format, setFormat] = useState('PDF') // 'PDF' | 'CSV'
   const [generating, setGenerating] = useState(false)
-  const [generatedReports, setGeneratedReports] = useState(demoGeneratedReports)
+  const [generatedReports, setGeneratedReports] = useState(() => readDemoCollection('reports', demoGeneratedReports))
   const [downloadNotice, setDownloadNotice] = useState('')
+  const issuedEvents = readDemoCollection('violations', []).filter((event) => event.disposition === 'Issued').length
+  const totalViolations = demoSummary.totalViolations + issuedEvents
 
   const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const periodRange = `${formatDate(fromDate)} - ${formatDate(toDate)}`
@@ -33,13 +36,18 @@ export default function ReportsPage() {
     }
     setGenerating(true)
     setTimeout(() => {
-      setGeneratedReports((reports) => [{
+      const report = {
         id: Date.now(),
         name: `${reportType} - ${intersection}`,
         range: periodRange,
         format,
         date: 'Just now',
-      }, ...reports])
+      }
+      setGeneratedReports((reports) => {
+        const updated = [report, ...reports]
+        writeDemoCollection('reports', updated)
+        return updated
+      })
       setGenerating(false)
       setDownloadNotice('Report added to generated reports.')
     }, 700)
@@ -53,8 +61,15 @@ export default function ReportsPage() {
         return
       }
       const rows = demoDailyViolations.map(({ day, count }) => `<tr><td>${escapeHtml(day)}</td><td>${count}</td></tr>`).join('')
-      printWindow.document.write(`<!doctype html><html><head><title>${escapeHtml(report.name)}</title><style>body{font:14px Arial,sans-serif;color:#18181b;margin:40px}h1{font-size:22px}p{color:#52525b}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border-bottom:1px solid #d4d4d8;padding:10px;text-align:left}th{font-size:11px;text-transform:uppercase;color:#71717a}.summary{margin-top:24px;padding:16px;background:#f4f4f5}</style></head><body><h1>${escapeHtml(report.name)}</h1><p>${escapeHtml(report.range)} · ${escapeHtml(intersection)}</p><table><thead><tr><th>Day</th><th>Violations</th></tr></thead><tbody>${rows}</tbody></table><div class="summary">Total violations: ${demoSummary.totalViolations} · System uptime: ${escapeHtml(demoSummary.uptime)}</div><script>window.onload=()=>window.print()</script></body></html>`)
+      printWindow.document.write(`<!doctype html><html><head><title>${escapeHtml(report.name)}</title><style>body{font:14px Arial,sans-serif;color:#18181b;margin:40px}h1{font-size:22px}p{color:#52525b}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border-bottom:1px solid #d4d4d8;padding:10px;text-align:left}th{font-size:11px;text-transform:uppercase;color:#71717a}.summary{margin-top:24px;padding:16px;background:#f4f4f5}</style></head><body><h1>${escapeHtml(report.name)}</h1><p>${escapeHtml(report.range)} · ${escapeHtml(intersection)}</p><table><thead><tr><th>Day</th><th>Violations</th></tr></thead><tbody>${rows}</tbody></table><div class="summary">Total violations: ${totalViolations} · System uptime: ${escapeHtml(demoSummary.uptime)}</div><script>window.onload=()=>window.print()</script></body></html>`)
       printWindow.document.close()
+      appendDemoRecord('notifications', {
+        title: 'Report ready to print',
+        detail: report.name,
+        path: '/reports',
+        preference: 'daily',
+        read: false,
+      }, demoNotifications)
       setDownloadNotice('Print view opened. Choose Save as PDF.')
       return
     }
@@ -63,7 +78,7 @@ export default function ReportsPage() {
       ['Day', 'Violations'],
       ...demoDailyViolations.map(({ day, count }) => [day, count]),
       [],
-      ['Total violations', demoSummary.totalViolations],
+      ['Total violations', totalViolations],
       ['Intersection', intersection],
       ['Report', report.name],
     ]
@@ -73,8 +88,17 @@ export default function ReportsPage() {
     const link = document.createElement('a')
     link.href = url
     link.download = `${report.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}.csv`
+    document.body.appendChild(link)
     link.click()
+    link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    appendDemoRecord('notifications', {
+      title: 'Report downloaded',
+      detail: report.name,
+      path: '/reports',
+      preference: 'daily',
+      read: false,
+    }, demoNotifications)
     setDownloadNotice('Mock report downloaded as CSV.')
   }
 
@@ -218,8 +242,8 @@ export default function ReportsPage() {
               className="px-8 py-2 bg-black hover:bg-zinc-800 disabled:bg-zinc-400 text-white text-xs font-bold rounded-md transition-colors cursor-pointer disabled:cursor-wait shadow-xs"
             >
               {generating ? 'Generating...' : 'Generate Report'}
-              {downloadNotice && <span role="status" className="ml-3 text-[10px] font-medium text-emerald-700">{downloadNotice}</span>}
             </button>
+            {downloadNotice && <span role="status" className="ml-3 text-[10px] font-medium text-emerald-700">{downloadNotice}</span>}
           </div>
         </div>
 
@@ -240,7 +264,7 @@ export default function ReportsPage() {
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600">Total Violations</span>
-                <strong className="text-zinc-900 font-bold">{demoSummary.totalViolations}</strong>
+                <strong className="text-zinc-900 font-bold">{totalViolations}</strong>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600">Avg. daily traffic volume</span>
@@ -306,7 +330,7 @@ export default function ReportsPage() {
             Generated Reports
           </h2>
           <span className="text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2.5 py-0.5 rounded-full">
-            4 reports
+            {generatedReports.length} reports
           </span>
         </div>
 

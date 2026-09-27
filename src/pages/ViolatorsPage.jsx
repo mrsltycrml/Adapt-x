@@ -1,17 +1,38 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { demoSummary, demoViolators } from '../data/demoData'
+import { demoNotifications, demoSummary, demoViolators } from '../data/demoData'
+import { appendDemoRecord, readDemoCollection, writeDemoCollection } from '../data/demoStore'
 
 export default function ViolatorsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [violators] = useState(() => readDemoCollection('violators', demoViolators))
+  const [notices, setNotices] = useState(() => readDemoCollection('notices', []))
   const selectedViolatorId = Number(searchParams.get('person')) || demoViolators[0].id
   const [noticeSent, setNoticeSent] = useState(false)
   const [ltoRecordOpen, setLtoRecordOpen] = useState(false)
 
   const selectedViolator =
-    demoViolators.find((v) => v.id === selectedViolatorId) || demoViolators[0]
+    violators.find((v) => v.id === selectedViolatorId) || violators[0]
 
   const handleSendNotice = () => {
+    const notice = {
+      violatorId: selectedViolator.id,
+      plate: selectedViolator.plate,
+      owner: selectedViolator.name,
+      createdAt: new Date().toISOString(),
+      status: 'Dispatched',
+    }
+    const updatedNotices = [notice, ...notices]
+    writeDemoCollection('notices', updatedNotices)
+    setNotices(updatedNotices)
+    appendDemoRecord('notifications', {
+      title: 'Notice dispatched',
+      detail: `${selectedViolator.plate} · ${selectedViolator.name}`,
+      path: `/violators?person=${selectedViolator.id}`,
+      preference: 'queue',
+      read: false,
+    }, demoNotifications)
+    appendDemoRecord('activity', { action: 'Notice dispatched', detail: `${selectedViolator.plate} · ${selectedViolator.name}`, createdAt: notice.createdAt })
     setNoticeSent(true)
     setTimeout(() => setNoticeSent(false), 2000)
   }
@@ -87,7 +108,7 @@ export default function ViolatorsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100/80">
-                {demoViolators.map((item) => {
+                {violators.map((item) => {
                   const isSelected = selectedViolatorId === item.id
                   return (
                     <tr
